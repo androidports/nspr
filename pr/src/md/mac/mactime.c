@@ -17,11 +17,9 @@
  */
 
 #include <OSUtils.h>
-#include <Timer.h>
+#include <time.h>
 
 #include "primpl.h"
-
-#include "mactime.h"
 
 PR_IMPLEMENT(UnsignedWide) dstLocalBaseMicroseconds;
 PR_IMPLEMENT(unsigned long) gJanuaryFirst1970Seconds;
