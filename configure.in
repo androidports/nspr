@@ -101,6 +101,9 @@ case "$target" in
 *-msvc*)
     _WIN32_MSVC=1
     ;;
+*-mksnt*)
+    _WIN32_MSVC=1
+    ;;
 esac
 
 if test -n "$_WIN32_MSVC"; then
@@ -116,8 +119,11 @@ dnl =
 dnl ========================================================
 dist_prefix='${MOD_DEPTH}/dist'
 dist_bindir='${dist_prefix}/bin'
-dist_includedir='${dist_prefix}/include'
+dist_includedir='${dist_prefix}/include/nspr'
 dist_libdir='${dist_prefix}/lib'
+if test "${includedir}" = '${prefix}/include'; then
+    includedir='${prefix}/include/nspr'
+fi
 
 AC_ARG_WITH(dist-prefix,
     [  --with-dist-prefix=DIST_PREFIX
@@ -130,7 +136,7 @@ AC_ARG_WITH(dist-bindir,
 
 AC_ARG_WITH(dist-includedir,
     [  --with-dist-includedir=DIR
-                          build include files in DIR [DIST_PREFIX/include]],
+                          build include files in DIR [DIST_PREFIX/include/nspr]],
     dist_includedir=$withval)
 
 AC_ARG_WITH(dist-libdir,
@@ -537,7 +543,7 @@ elif test "$OS_ARCH" = "Windows_NT"; then
 # Moreover, it doesn't have the -p option, so we need to use uname -m.
 #
     OS_ARCH=WINNT
-#    OS_MINOR_RELEASE=`uname -v`
+    OS_MINOR_RELEASE=`uname -v`
     if test "$OS_MINOR_RELEASE" = "00"; then
         OS_MINOR_RELEASE=0
     fi
@@ -602,7 +608,7 @@ dnl ========================================================
 dnl Override of system specific host options
 dnl ========================================================
 case "$host" in
-*-mingw*|*-cygwin*|*-msvc*)
+*-mingw*|*-cygwin*|*-msvc*|*-mksnt*)
     ;;
 *-beos*)
     HOST_CFLAGS="$HOST_CFLAGS -DXP_BEOS -DBeOS -DBEOS -D_POSIX_SOURCE"
@@ -778,6 +784,30 @@ case "$target" in
 
     ;;
 
+*-darwin*)
+    AC_DEFINE(XP_UNIX)
+    AC_DEFINE(DARWIN)
+    AC_DEFINE(HAVE_BSD_FLOCK)
+    CFLAGS="$CFLAGS -Wmost -fno-common -pipe"
+    if echo $OS_TEST | grep -c 86 2>/dev/null; then
+        CFLAGS="$CFLAGS -mno-486"
+        AC_DEFINE(i386)
+        CPU_ARCH=i386
+    else
+        AC_DEFINE(ppc)
+        CPU_ARCH=ppc
+    fi
+    DSO_LDOPTS='-dynamiclib -compatibility_version 1 -current_version 1 -all_load -install_name @executable_path/$@'
+    # Use the standard preprocessor (cpp)
+    CFLAGS="$CFLAGS -traditional-cpp"
+    MKSHLIB='$(CC) -arch $(CPU_ARCH) $(DSO_LDOPTS) -o $@'
+    STRIP="$STRIP -x -S"
+    DLL_SUFFIX=dylib
+    USE_PTHREADS=1
+    MDCPUCFG_H=_darwin.cfg
+    PR_MD_CSRCS=darwin.c
+    ;;
+
 *-dgux*)
     AC_DEFINE(XP_UNIX)
     AC_DEFINE(_PR_LOCAL_THREADS_ONLY)
@@ -860,7 +890,7 @@ case "$target" in
         AC_DEFINE(HAVE_INT_LOCALTIME_R)
     fi
 
-    if echo "$OS_RELEASE" | egrep '^(B.10.30|B.11.00)' >/dev/null; then
+    if echo "$OS_RELEASE" | egrep '^(B.10.30|B.11.00|B.11.11)' >/dev/null; then
         AC_DEFINE(HAVE_POINTER_LOCALTIME_R)
     fi
 
@@ -895,7 +925,7 @@ case "$target" in
         DEFAULT_IMPL_STRATEGY=_PTH
     fi
 
-    if test "$OS_RELEASE" = "B.11.00"; then
+    if echo "$OS_RELEASE" | egrep '^(B.11.00|B.11.11)' >/dev/null; then
         AC_DEFINE(HPUX10)
         AC_DEFINE(HPUX11)
         AC_DEFINE(_LARGEFILE64_SOURCE)
@@ -1083,7 +1113,7 @@ case "$target" in
     esac    
     ;;
 
-*-mingw*|*-cygwin*|*-msvc*)
+*-mingw*|*-cygwin*|*-msvc*|*-mksnt*)
     AC_DEFINE(XP_PC)
     AC_DEFINE(WIN32)
     PR_MD_ARCH_DIR=windows
@@ -1320,16 +1350,12 @@ mips-sony-newsos*)
     AC_DEFINE(HAVE_POINTER_LOCALTIME_R)
     MDCPUCFG_H=_nto.cfg
     PR_MD_CSRCS=nto.c
-    MKSHLIB='qcc -Vgcc_ntox86 -shared -Wl,-h$(@:$(OBJDIR)/%.so=%.so) -M -o $(@:$(OBJDIR)/%.so=%.so)'
-    CFLAGS="$CFLAGS -Wc,-Wall -Wc,-Wno-parentheses -shared"
+    MKSHLIB='$(CC) $(DSO_LDOPTS) -Wl,-soname -Wl,$(notdir $@) -o $@'
+    DSO_CFLAGS=-fPIC
+    DSO_LDOPTS=-shared
     OS_LIBS="$OS_LIBS -lsocket"
     _OPTIMIZE_FLAGS="-O1"
-    _DEBUG_FLAGS="-O1 -gstabs"
-    CC="qcc -Vgcc_ntox86 -w"
-    CXX='$(CC)'
-    LD="qcc -Vgcc_ntox86 -nostdlib"
-    AR="qcc -Vgcc_ntox86 -M -a $@"
-    AR_FLAGS=
+    _DEBUG_FLAGS="-gstabs"
 	;;
 
 *-openbsd*)
@@ -1413,27 +1439,6 @@ mips-sony-newsos*)
     USE_NSPR_THREADS=1
     MDCPUCFG_H=_qnx.cfg
     PR_MD_CSRCS=qnx.c
-    ;;
-
-*-darwin*)
-    AC_DEFINE(XP_UNIX)
-    AC_DEFINE(RHAPSODY)
-    AC_DEFINE(HAVE_BSD_FLOCK)
-    CFLAGS="$CFLAGS -Wmost -fno-common -pipe"    
-    if echo $OS_TEST | grep -c 86 2>/dev/null; then
-        CFLAGS="$CFLAGS -mno-486"
-        AC_DEFINE(i386)
-        CPU_ARCH=i386
-    else
-        AC_DEFINE(ppc)
-        CPU_ARCH=ppc
-    fi
-    DSO_LDOPTS='-dynamiclib -compatibility_version 1 -current_version 1 -all_load'
-    MKSHLIB='$(CC) -arch $(CPU_ARCH) $(DSO_LDOPTS) -o $@'
-    DLL_SUFFIX=dylib
-    USE_PTHREADS=1
-    MDCPUCFG_H=_rhapsody.cfg
-    PR_MD_CSRCS=rhapsody.c
     ;;
 
 *-*-sco*)
@@ -2063,7 +2068,7 @@ case "$target" in
         AC_DEFINE(_PR_LOCAL_THREADS_ONLY)
     fi
     ;;
-*-mingw*|*-cygwin*|*-uwin*|*-msvc*)
+*-mingw*|*-cygwin*|*-msvc*|*-mksnt*)
     dnl win32 does not use pthreads
     USE_PTHREADS=
     _PTHREAD_LDFLAGS=
@@ -2107,6 +2112,12 @@ case "$target" in
                 PR_MD_ASFILES="$PR_MD_ASFILES os_SunOS_32.s"
             fi
         fi
+    fi
+    ;;
+*-nto*)
+    if test -n "$USE_PTHREADS"; then
+        AC_DEFINE(_PR_HAVE_GETHOST_R)
+        AC_DEFINE(_PR_HAVE_GETHOST_R_POINTER)
     fi
     ;;
 esac
@@ -2248,6 +2259,7 @@ lib/ds/Makefile
 lib/libc/Makefile 
 lib/libc/include/Makefile 
 lib/libc/src/Makefile 
+lib/tests/Makefile
 pr/Makefile 
 pr/include/Makefile 
 pr/include/md/Makefile 
