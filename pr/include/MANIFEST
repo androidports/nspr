@@ -37,12 +37,11 @@ prshma.h
 prsystem.h
 prthread.h
 prtime.h
+prtpool.h
 prtrace.h
 prtypes.h
 prvrsion.h
 prwin16.h
-
-prlink_mac.h
 
 obsolete/protypes.h
 obsolete/prsem.h

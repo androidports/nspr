@@ -208,18 +208,6 @@ NSPR_API(void) PR_NTFast_UpdateAcceptContext(PRFileDesc *acceptSock,
                                         PRFileDesc *listenSock);
 
 
-/* FUNCTION: PR_NT_UseNonblock
-** DESCRIPTION:
-**    This function only works on NT.  It tells nspr to use nonblocking io
-**    rather than async IO.  There is no way to use some of each.  This 
-**    function should be called immediately after calling PR_Init().
-**
-**    WARNING: THIS FUNCTION IS A TEMPORARY HACK AND WILL BE REMOVED SHORTLY
-**    (LIKE ALL FUNCTIONS IN THE PRIVATE AREA).  DO NOT USE THIS FUNCTION AT
-**    ALL WITHOUT CONTACTING mbelshe@netscape.com.
-*/
-NSPR_API(void) PR_NT_UseNonblock();
-
 /* FUNCTION: PR_NT_CancelIo
 ** DESCRIPTION:
 **    Cancel IO operations on fd.
@@ -228,6 +216,15 @@ NSPR_API(PRStatus) PR_NT_CancelIo(PRFileDesc *fd);
 
 
 #endif /* WIN32 */
+
+/*
+** Need external access to this on Mac so we can first set up our faux
+** environment vars
+*/
+#ifdef XP_MAC
+NSPR_API(void) PR_Init_Log(void);
+#endif
+
 
 PR_END_EXTERN_C
 

@@ -40,7 +40,7 @@ AC_DEFINE(USE_AUTOCONF)
 dnl ========================================================
 dnl = Defaults
 dnl ========================================================
-NSPR_VERSION=3
+NSPR_VERSION=4
 NSPR_MODNAME=nspr20
 _HAVE_PTHREADS=
 USE_PTHREADS=
@@ -555,6 +555,7 @@ case "$target" in
     AC_DEFINE(_POSIX_SOURCE)
     AC_DEFINE(_BSD_SOURCE)
     AC_DEFINE(_SVID_SOURCE)
+    AC_DEFINE(LINUX)
     CFLAGS="$CFLAGS -pipe -ansi"
     CXXFLAGS="$CXXFLAGS -pipe -ansi"
     MDCPUCFG_H=_linux.cfg

@@ -31,7 +31,6 @@
 #include <Strings.h>
 #include <Aliases.h>
 
-#include "prlink_mac.h"
 #include "macdll.h"
 #include "mdmac.h"
 #endif
@@ -261,6 +260,7 @@ PR_IMPLEMENT(PRStatus) PR_SetLibraryPath(const char *path)
 {
     PRStatus rv = PR_SUCCESS;
 
+    if (!_pr_initialized) _PR_ImplicitInitialization();
     PR_EnterMonitor(pr_linker_lock);
     PR_FREEIF(_pr_currentLibPath);
     if (path) {
@@ -285,6 +285,7 @@ PR_GetLibraryPath()
     char *ev;
     char *copy = NULL;  /* a copy of _pr_currentLibPath */
 
+    if (!_pr_initialized) _PR_ImplicitInitialization();
     PR_EnterMonitor(pr_linker_lock);
     if (_pr_currentLibPath != NULL) {
         goto exit;
@@ -798,6 +799,7 @@ PR_FindLibrary(const char *name)
 {
     PRLibrary* result;
 
+    if (!_pr_initialized) _PR_ImplicitInitialization();
     PR_EnterMonitor(pr_linker_lock);
     result = pr_UnlockedFindLibrary(name);
     PR_ExitMonitor(pr_linker_lock);
@@ -806,17 +808,6 @@ PR_FindLibrary(const char *name)
 
 
 #ifdef XP_MAC
-
-PR_IMPLEMENT(PRLibrary*) 
-PR_LoadNamedFragment(const FSSpec *fileSpec, const char* fragmentName)
-{
-    PRLibSpec libSpec;
-
-    libSpec.type = PR_LibSpec_MacNamedFragment;
-    libSpec.value.mac_named_fragment.fsspec = fileSpec;
-    libSpec.value.mac_named_fragment.name = fragmentName;
-    return PR_LoadLibraryWithFlags(libSpec, 0);
-}
 
 static PRLibrary*
 pr_Mac_LoadNamedFragment(const FSSpec *fileSpec, const char* fragmentName)
@@ -874,17 +865,6 @@ unlock:
 	return result;
 }
 
-
-PR_EXTERN(PRLibrary*)
-PR_LoadIndexedFragment(const FSSpec *fileSpec, PRUint32 fragIndex)
-{
-    PRLibSpec libSpec;
-
-    libSpec.type = PR_LibSpec_MacIndexedFragment;
-    libSpec.value.mac_indexed_fragment.fsspec = fileSpec;
-    libSpec.value.mac_indexed_fragment.index = fragIndex;
-    return PR_LoadLibraryWithFlags(libSpec, 0);
-}
 
 static PRLibrary*
 pr_Mac_LoadIndexedFragment(const FSSpec *fileSpec, PRUint32 fragIndex)
@@ -1166,6 +1146,7 @@ PR_FindSymbolAndLibrary(const char *raw_name, PRLibrary* *lib)
 #endif
     PRLibrary* lm;
 
+    if (!_pr_initialized) _PR_ImplicitInitialization();
     /*
     ** Mangle the raw symbol name in any way that is platform specific.
     */
