@@ -64,7 +64,8 @@
  * On these platforms, symbols have a leading '_'.
  */
 #if defined(SUNOS4) || defined(RHAPSODY) || defined(NEXTSTEP) \
-    || defined(OPENBSD) || defined(WIN16) || defined(NETBSD)
+    || defined(OPENBSD) || defined(WIN16) \
+    || (defined(NETBSD) && !defined(__ELF__))
 #define NEED_LEADING_UNDERSCORE
 #endif
 
@@ -480,6 +481,7 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
 {
     PRLibrary *lm;
     PRLibrary* result;
+    PRInt32 oserr;
 
     if (!_pr_initialized) _PR_ImplicitInitialization();
 
@@ -490,7 +492,10 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
     if (result != NULL) goto unlock;
 
     lm = PR_NEWZAP(PRLibrary);
-    if (lm == NULL) goto unlock;
+    if (lm == NULL) {
+        oserr = _MD_ERRNO();
+        goto unlock;
+    }
     lm->staticTable = NULL;
 
 #ifdef XP_OS2  /* Why isn't all this stuff in MD code?! */
@@ -502,6 +507,7 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
         retry:
               ulRc = DosLoadModule(pszError, _MAX_PATH, (PSZ) name, &h);
           if (ulRc != NO_ERROR) {
+              oserr = ulRc;
               PR_DELETE(lm);
               goto unlock;
           }
@@ -519,6 +525,7 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
 
     h = LoadLibrary(name);
     if (h < (HINSTANCE)HINSTANCE_ERROR) {
+        oserr = _MD_ERRNO();
         PR_DELETE(lm);
         goto unlock;
     }
@@ -538,7 +545,7 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
     }
 #endif /* WIN32 || WIN16 */
 
-#if defined(XP_MAC) && GENERATINGCFM
+#if defined(XP_MAC) && TARGET_RT_MAC_CFM
     {
     OSErr                err;
     Ptr                    main;
@@ -562,7 +569,7 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
     if (strchr(name, PR_PATH_SEPARATOR) == NULL)
     {
         if (strchr(name, PR_DIRECTORY_SEPARATOR) == NULL)
-    {
+        {
         /*
          * The name did not contain a ":", so it must be a
          * library name.  Convert the name to a Pascal string
@@ -594,7 +601,10 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
                 &connectionID, &main, errName);
 #endif
         if (err != noErr)
+        {
+            oserr = err;
             goto unlock;    
+        }
         
         libName = name;
     }
@@ -624,7 +634,10 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
         /* Copy the name: we'll change it */
         cMacPath = strdup(name);    
         if (cMacPath == NULL)
+        {
+            oserr = _MD_ERRNO();
             goto unlock;
+        }
             
         /* First, get the vRefNum */
         position = strchr(cMacPath, PR_PATH_SEPARATOR);
@@ -646,6 +659,7 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
             index--;
         if (index == 0 || index == strlen(cMacPath))
         {
+            oserr = _MD_ERRNO();
             PR_DELETE(cMacPath);
             goto unlock;
         }
@@ -653,10 +667,8 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
         cFileName = &(cMacPath[index + 1]);
         
         /* Convert the path and name into Pascal strings */
-        strcpy((char*) &pName, cMacPath);
-        c2pstr((char*) &pName);
-        strcpy((char*) &fileSpec.name, cFileName);
-        c2pstr((char*) &fileSpec.name);
+        PStrFromCStr(cMacPath, pName);
+        PStrFromCStr(cFileName, fileSpec.name);
         strcpy(cName, cFileName);
         PR_DELETE(cMacPath);
         cMacPath = NULL;
@@ -668,14 +680,20 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
         pb.dirInfo.ioFDirIndex = 0;
         err = PBGetCatInfoSync(&pb);
         if (err != noErr)
+        {
+            oserr = err;
             goto unlock;
+        }
         fileSpec.parID = pb.dirInfo.ioDrDirID;
 
         /* Resolve an alias if this was one */
         err = ResolveAliasFile(&fileSpec, true, &tempUnusedBool,
                 &tempUnusedBool);
         if (err != noErr)
+        {
+            oserr = err;
             goto unlock;
+        }
 
         /* Finally, try to load the library */
         err = GetDiskFragment(&fileSpec, 0, kCFragGoesToEOF, fileSpec.name, 
@@ -683,7 +701,10 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
 
         libName = cName;
         if (err != noErr)
+        {
+            oserr = err;
             goto unlock;
+        }
     }
     
     lm->name = strdup(libName);
@@ -691,7 +712,7 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
     lm->next = pr_loadmap;
     pr_loadmap = lm;
     }
-#elif defined(XP_MAC) && !GENERATINGCFM
+#elif defined(XP_MAC) && !TARGET_RT_MAC_CFM
     {
 
     }
@@ -734,12 +755,13 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
     NSModule h = NULL;
     if (NSCreateObjectFileImageFromFile(name, &ofi)
             == NSObjectFileImageSuccess) {
-        h = NSLinkModule(ofi, name, TRUE);
+        h = NSLinkModule(ofi, name, NSLINKMODULE_OPTION_PRIVATE);
     }
 #else
 #error Configuration error
 #endif
     if (!h) {
+        oserr = _MD_ERRNO();
         PR_DELETE(lm);
         goto unlock;
     }
@@ -769,10 +791,8 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
 		h = load_add_on( name );
 
 	if( h == B_ERROR || h <= 0 ) {
-	    h = 0;
-	    result = NULL;
+	    oserr = h;
 	    PR_DELETE( lm );
-	    lm = NULL;
 	    goto unlock;
 	}
 	lm->name = strdup(name);
@@ -787,8 +807,8 @@ pr_LoadLibraryByPathname(const char *name, PRIntn flags)
 
   unlock:
     if (result == NULL) {
-        PR_SetError(PR_LOAD_LIBRARY_ERROR, _MD_ERRNO());
-        DLLErrorInternal(_MD_ERRNO());  /* sets error text */
+        PR_SetError(PR_LOAD_LIBRARY_ERROR, oserr);
+        DLLErrorInternal(oserr);  /* sets error text */
     }
     PR_ExitMonitor(pr_linker_lock);
     return result;
@@ -976,7 +996,7 @@ PR_UnloadLibrary(PRLibrary *lib)
     }
 #endif  /* XP_PC */
 
-#if defined(XP_MAC) && GENERATINGCFM
+#if defined(XP_MAC) && TARGET_RT_MAC_CFM
     /* Close the connection */
     CloseConnection(&(lib->dlh));
 #endif
@@ -1083,7 +1103,14 @@ pr_FindSymbolInLib(PRLibrary *lm, const char *name)
         f = NULL;
     }
 #elif defined(USE_MACH_DYLD)
-    f = NSAddressOfSymbol(NSLookupAndBindSymbol(name));
+    {
+        NSSymbol symbol;
+        symbol = NSLookupSymbolInModule(lm->dlh, name);
+        if (symbol != NULL)
+            f = NSAddressOfSymbol(symbol);
+        else
+            f = NULL;
+    }
 #endif
 #endif /* HAVE_DLL */
 #endif /* XP_UNIX */
