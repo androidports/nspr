@@ -29,6 +29,12 @@
 #define GESTALT_OPEN_TPT_TCP_PRESENT    gestaltOpenTptTCPPresentMask
 
 #include <OpenTptInternet.h>    // All the internet typedefs
+
+#if (UNIVERSAL_INTERFACES_VERSION >= 0x0330)
+// for some reason Apple removed this typedef.
+typedef struct OTConfiguration	OTConfiguration;
+#endif
+
 #include "primpl.h"
 
 typedef enum SndRcvOpCode {
@@ -48,8 +54,8 @@ static struct {
 static PRBool gOTInitialized;
 
 static pascal void  DNSNotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie);
-static pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, 
-            OTResult result, void * cookie);
+static pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie);
+static pascal void  RawEndpointNotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie);
 
 static PRBool GetState(PRFileDesc *fd, PRBool *readReady, PRBool *writeReady, PRBool *exceptReady);
 
@@ -59,24 +65,20 @@ extern void DoneWaitingOnThisThread(PRThread *thread);
 #if TARGET_CARBON
 OTClientContextPtr  clientContext = NULL;
 
-OTNotifyUPP	DNSNotifierRoutineUPP;
-OTNotifyUPP notifierRoutineUPP;
-
-#define DNS_NOTIFIER_ROUTINE	DNSNotifierRoutineUPP
-#define NOTIFIER_ROUTINE		notifierRoutineUPP
-#define INIT_OPEN_TRANSPORT()	InitOpenTransport(clientContext, kInitOTForExtensionMask)
-#define OT_OPEN_INTERNET_SERVICES(config, flags, err)	OTOpenInternetServices(config, flags, err, clientContext)
-#define OT_OPEN_ENDPOINT(config, flags, info, err)		OTOpenEndpoint(config, flags, info, err, clientContext)
+#define INIT_OPEN_TRANSPORT()	InitOpenTransportInContext(kInitOTForExtensionMask, &clientContext)
+#define OT_OPEN_INTERNET_SERVICES(config, flags, err)	OTOpenInternetServicesInContext(config, flags, err, clientContext)
+#define OT_OPEN_ENDPOINT(config, flags, info, err)		OTOpenEndpointInContext(config, flags, info, err, clientContext)
 
 #else
 
-#define DNS_NOTIFIER_ROUTINE	DNSNotifierRoutine
-#define NOTIFIER_ROUTINE		NotifierRoutine
 #define INIT_OPEN_TRANSPORT()	InitOpenTransport()
 #define OT_OPEN_INTERNET_SERVICES(config, flags, err)	OTOpenInternetServices(config, flags, err)
 #define OT_OPEN_ENDPOINT(config, flags, info, err)		OTOpenEndpoint(config, flags, info, err)
 #endif /* TARGET_CARBON */
 
+static OTNotifyUPP	DNSNotifierRoutineUPP;
+static OTNotifyUPP NotifierRoutineUPP;
+static OTNotifyUPP RawEndpointNotifierRoutineUPP;
 
 void _MD_InitNetAccess()
 {
@@ -97,14 +99,9 @@ void _MD_InitNetAccess()
         
     PR_ASSERT(hasOTTCPIP == PR_TRUE);
 
-#if TARGET_CARBON
     DNSNotifierRoutineUPP	=  NewOTNotifyUPP(DNSNotifierRoutine);
-    notifierRoutineUPP		=  NewOTNotifyUPP(NotifierRoutine);
-
-    errOT = OTAllocClientContext((UInt32)0, &clientContext);
-    PR_ASSERT(err == kOTNoError);
-#endif
-
+    NotifierRoutineUPP		=  NewOTNotifyUPP(NotifierRoutine);
+    RawEndpointNotifierRoutineUPP = NewOTNotifyUPP(RawEndpointNotifierRoutine);
 
     errOT = INIT_OPEN_TRANSPORT();
     PR_ASSERT(err == kOTNoError);
@@ -129,7 +126,7 @@ static void _MD_FinishInitNetAccess()
     PR_ASSERT((dnsContext.serviceRef != NULL) && (errOT == kOTNoError));
 
     /* Install notify function for DNR Address To String completion */
-    errOT = OTInstallNotifier(dnsContext.serviceRef, DNS_NOTIFIER_ROUTINE, &dnsContext);
+    errOT = OTInstallNotifier(dnsContext.serviceRef, DNSNotifierRoutineUPP, &dnsContext);
     PR_ASSERT(errOT == kOTNoError);
 
     /* Put us into async mode */
@@ -140,7 +137,7 @@ static void _MD_FinishInitNetAccess()
 }
 
 
-pascal void  DNSNotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie)
+static pascal void  DNSNotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie)
 {
 #pragma unused(contextPtr)
     _PRCPU *    cpu    = _PR_MD_CURRENT_CPU(); 
@@ -262,7 +259,7 @@ WakeUpNotifiedThread(PRThread *thread, OTResult result)
 // Notification routine
 // Async callback routine.
 // A5 is OK. Cannot allocate memory here
-pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie)
+static pascal void  NotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie)
 {
 	PRFilePrivate *secret  = (PRFilePrivate *) contextPtr;
 	_MDFileDesc * md       = &(secret->md);
@@ -1037,7 +1034,7 @@ typedef struct RawEndpointAndThread
 // Notification routine for raw endpoints not yet attached to a PRFileDesc.
 // Async callback routine.
 // A5 is OK. Cannot allocate memory here
-pascal void  RawEndpointNotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie)
+static pascal void  RawEndpointNotifierRoutine(void * contextPtr, OTEventCode code, OTResult result, void * cookie)
 {
 	RawEndpointAndThread *endthr = (RawEndpointAndThread *) contextPtr;
     PRThread *    thread   = endthr->thread;
@@ -1194,7 +1191,7 @@ PRInt32 _MD_accept(PRFileDesc *fd, PRNetAddr *addr, PRUint32 *addrlen, PRInterva
 	endthr->thread = me;
 	endthr->endpoint = (EndpointRef) newosfd;
 	
-	err = OTInstallNotifier((ProviderRef) newosfd, RawEndpointNotifierRoutine, endthr);
+	err = OTInstallNotifier((ProviderRef) newosfd, RawEndpointNotifierRoutineUPP, endthr);
     PR_ASSERT(err == kOTNoError);
     
 	err = OTSetAsynchronous((EndpointRef) newosfd);
@@ -1350,6 +1347,7 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
     PRInt32 bytesLeft = amount;
 
     PR_ASSERT(flags == 0);
+    PR_ASSERT(opCode == kSTREAM_SEND || opCode == kSTREAM_RECEIVE);
     
     if (endpoint == NULL) {
         err = kEBADFErr;
@@ -1361,11 +1359,6 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
         goto ErrorExit;
     }
     
-    if (opCode != kSTREAM_SEND && opCode != kSTREAM_RECEIVE) {
-        err = kEINVALErr;
-        goto ErrorExit;
-    }
-        
     while (bytesLeft > 0) {
     
         PrepareForAsyncCompletion(me, fd->secret->md.osfd);    
@@ -1434,6 +1427,10 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
         }
 
 		me->io_pending = PR_FALSE;
+        if (opCode == kSTREAM_SEND)
+            fd->secret->md.write.thread = nil;
+        else
+            fd->secret->md.read.thread  = nil;
 
         if (result > 0) {
             buf = (void *) ( (UInt32) buf + (UInt32)result );
@@ -1471,9 +1468,13 @@ static PRInt32 SendReceiveStream(PRFileDesc *fd, void *buf, PRInt32 amount,
 		}
     }
 
+    PR_ASSERT(opCode == kSTREAM_SEND ? fd->secret->md.write.thread == nil :
+                                       fd->secret->md.read.thread  == nil);
     return amount;
 
 ErrorExit:
+    PR_ASSERT(opCode == kSTREAM_SEND ? fd->secret->md.write.thread == nil :
+                                       fd->secret->md.read.thread  == nil);
     macsock_map_error(err);
     return -1;
 }                               
@@ -1789,7 +1790,7 @@ void _MD_makenonblock(PRFileDesc *fd)
 	//                fd changes, but the secret structure does not;
 	//            (b) the notifier func refers only to the secret data structure
 	//                anyway.
-	err = OTInstallNotifier(endpointRef, NOTIFIER_ROUTINE, fd->secret);
+	err = OTInstallNotifier(endpointRef, NotifierRoutineUPP, fd->secret);
 	PR_ASSERT(err == kOTNoError);
 	
 	// Now that we have a NotifierRoutine installed, we can make the endpoint asynchronous
@@ -1866,7 +1867,8 @@ PR_IMPLEMENT(unsigned long) inet_addr(const char *cp)
     	_MD_FinishInitNetAccess();
 
     err = OTInetStringToHost((char*) cp, &host);
-    PR_ASSERT(err == kOTNoError);
+    if (err != kOTNoError)
+        return -1;
     
     return host;
 }
