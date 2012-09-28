@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** File:            ptsynch.c
@@ -148,13 +116,13 @@ static void pt_PostNotifies(PRLock *lock, PRBool unlock)
             }
 #if defined(DEBUG)
             pt_debug.cvars_notified += 1;
-            if (0 > PR_AtomicDecrement(&cv->notify_pending))
+            if (0 > PR_ATOMIC_DECREMENT(&cv->notify_pending))
             {
                 pt_debug.delayed_cv_deletes += 1;
                 PR_DestroyCondVar(cv);
             }
 #else  /* defined(DEBUG) */
-            if (0 > PR_AtomicDecrement(&cv->notify_pending))
+            if (0 > PR_ATOMIC_DECREMENT(&cv->notify_pending))
                 PR_DestroyCondVar(cv);
 #endif  /* defined(DEBUG) */
         }
@@ -196,7 +164,7 @@ PR_IMPLEMENT(void) PR_DestroyLock(PRLock *lock)
     memset(lock, 0xaf, sizeof(PRLock));
     pt_debug.locks_destroyed += 1;
 #endif
-    PR_DELETE(lock);
+    PR_Free(lock);
 }  /* PR_DestroyLock */
 
 PR_IMPLEMENT(void) PR_Lock(PRLock *lock)
@@ -338,7 +306,7 @@ static void pt_PostNotifyToCvar(PRCondVar *cvar, PRBool broadcast)
     }
 
     /* A brand new entry in the array */
-    (void)PR_AtomicIncrement(&cvar->notify_pending);
+    (void)PR_ATOMIC_INCREMENT(&cvar->notify_pending);
     notified->cv[index].times = (broadcast) ? -1 : 1;
     notified->cv[index].cv = cvar;
     notified->length += 1;
@@ -367,14 +335,14 @@ PR_IMPLEMENT(PRCondVar*) PR_NewCondVar(PRLock *lock)
 
 PR_IMPLEMENT(void) PR_DestroyCondVar(PRCondVar *cvar)
 {
-    if (0 > PR_AtomicDecrement(&cvar->notify_pending))
+    if (0 > PR_ATOMIC_DECREMENT(&cvar->notify_pending))
     {
         PRIntn rv = pthread_cond_destroy(&cvar->cv); PR_ASSERT(0 == rv);
 #if defined(DEBUG)
         memset(cvar, 0xaf, sizeof(PRCondVar));
         pt_debug.cvars_destroyed += 1;
 #endif
-        PR_DELETE(cvar);
+        PR_Free(cvar);
     }
 }  /* PR_DestroyCondVar */
 
@@ -463,6 +431,7 @@ PR_IMPLEMENT(PRMonitor*) PR_NewMonitor(void)
 {
     PRMonitor *mon;
     PRCondVar *cvar;
+    int rv;
 
     if (!_pr_initialized) _PR_ImplicitInitialization();
 
@@ -473,25 +442,37 @@ PR_IMPLEMENT(PRMonitor*) PR_NewMonitor(void)
         return NULL;
     }
     mon = PR_NEWZAP(PRMonitor);
-    if (mon != NULL)
+    if (mon == NULL)
     {
-        int rv;
-        rv = _PT_PTHREAD_MUTEX_INIT(mon->lock.mutex, _pt_mattr); 
-        PR_ASSERT(0 == rv);
+        PR_Free(cvar);
+        PR_SetError(PR_OUT_OF_MEMORY_ERROR, 0);
+        return NULL;
+    }
 
-        _PT_PTHREAD_INVALIDATE_THR_HANDLE(mon->owner);
+    rv = _PT_PTHREAD_MUTEX_INIT(mon->lock.mutex, _pt_mattr); 
+    PR_ASSERT(0 == rv);
+    if (0 != rv)
+    {
+        PR_Free(mon);
+        PR_Free(cvar);
+        PR_SetError(PR_OPERATION_NOT_SUPPORTED_ERROR, 0);
+        return NULL;
+    }
 
-        mon->cvar = cvar;
-        rv = _PT_PTHREAD_COND_INIT(mon->cvar->cv, _pt_cvar_attr); 
-        PR_ASSERT(0 == rv);
-        mon->entryCount = 0;
-        mon->cvar->lock = &mon->lock;
-        if (0 != rv)
-        {
-            PR_DELETE(mon);
-            PR_DELETE(cvar);
-            mon = NULL;
-        }
+    _PT_PTHREAD_INVALIDATE_THR_HANDLE(mon->owner);
+
+    mon->cvar = cvar;
+    rv = _PT_PTHREAD_COND_INIT(mon->cvar->cv, _pt_cvar_attr); 
+    PR_ASSERT(0 == rv);
+    mon->entryCount = 0;
+    mon->cvar->lock = &mon->lock;
+    if (0 != rv)
+    {
+        pthread_mutex_destroy(&mon->lock.mutex);
+        PR_Free(mon);
+        PR_Free(cvar);
+        PR_SetError(PR_OPERATION_NOT_SUPPORTED_ERROR, 0);
+        return NULL;
     }
     return mon;
 }  /* PR_NewMonitor */
@@ -513,7 +494,7 @@ PR_IMPLEMENT(void) PR_DestroyMonitor(PRMonitor *mon)
 #if defined(DEBUG)
         memset(mon, 0xaf, sizeof(PRMonitor));
 #endif
-    PR_DELETE(mon);    
+    PR_Free(mon);    
 }  /* PR_DestroyMonitor */
 
 
@@ -674,7 +655,7 @@ PR_IMPLEMENT(void) PR_DestroySem(PRSemaphore *semaphore)
         "PR_DestroySem", "locks & condition variables");
     PR_DestroyLock(semaphore->cvar->lock);
     PR_DestroyCondVar(semaphore->cvar);
-    PR_DELETE(semaphore);
+    PR_Free(semaphore);
 }  /* PR_DestroySem */
 
 PR_IMPLEMENT(PRSemaphore*) PR_NewSem(PRUintn value)
@@ -700,7 +681,7 @@ PR_IMPLEMENT(PRSemaphore*) PR_NewSem(PRUintn value)
             }
             PR_DestroyLock(lock);
         }
-        PR_DELETE(semaphore);
+        PR_Free(semaphore);
     }
     return NULL;
 }
@@ -757,7 +738,7 @@ PR_IMPLEMENT(PRSem *) PR_OpenSemaphore(
     if ((sem_t *) -1 == sem->sem)
     {
         _PR_MD_MAP_DEFAULT_ERROR(errno);
-        PR_DELETE(sem);
+        PR_Free(sem);
         return NULL;
     }
     return sem;
@@ -796,7 +777,7 @@ PR_IMPLEMENT(PRStatus) PR_CloseSemaphore(PRSem *sem)
         _PR_MD_MAP_DEFAULT_ERROR(errno);
         return PR_FAILURE;
     }
-    PR_DELETE(sem);
+    PR_Free(sem);
     return PR_SUCCESS;
 }
 
@@ -907,7 +888,7 @@ PR_IMPLEMENT(PRSem *) PR_OpenSemaphore(
             if (semctl(sem->semid, 0, SETVAL, arg) == -1)
             {
                 _PR_MD_MAP_DEFAULT_ERROR(errno);
-                PR_DELETE(sem);
+                PR_Free(sem);
                 return NULL;
             }
             /* call semop to set sem_otime to nonzero */
@@ -917,7 +898,7 @@ PR_IMPLEMENT(PRSem *) PR_OpenSemaphore(
             if (semop(sem->semid, &sop, 1) == -1)
             {
                 _PR_MD_MAP_DEFAULT_ERROR(errno);
-                PR_DELETE(sem);
+                PR_Free(sem);
                 return NULL;
             }
             return sem;
@@ -926,7 +907,7 @@ PR_IMPLEMENT(PRSem *) PR_OpenSemaphore(
         if (errno != EEXIST || flags & PR_SEM_EXCL)
         {
             _PR_MD_MAP_DEFAULT_ERROR(errno);
-            PR_DELETE(sem);
+            PR_Free(sem);
             return NULL;
         }
     }
@@ -935,7 +916,7 @@ PR_IMPLEMENT(PRSem *) PR_OpenSemaphore(
     if (sem->semid == -1)
     {
         _PR_MD_MAP_DEFAULT_ERROR(errno);
-        PR_DELETE(sem);
+        PR_Free(sem);
         return NULL;
     }
     for (i = 0; i < MAX_TRIES; i++)
@@ -948,7 +929,7 @@ PR_IMPLEMENT(PRSem *) PR_OpenSemaphore(
     if (i == MAX_TRIES)
     {
         PR_SetError(PR_IO_TIMEOUT_ERROR, 0);
-        PR_DELETE(sem);
+        PR_Free(sem);
         return NULL;
     }
     return sem;
@@ -986,7 +967,7 @@ PR_IMPLEMENT(PRStatus) PR_PostSemaphore(PRSem *sem)
 
 PR_IMPLEMENT(PRStatus) PR_CloseSemaphore(PRSem *sem)
 {
-    PR_DELETE(sem);
+    PR_Free(sem);
     return PR_SUCCESS;
 }
 
@@ -1112,7 +1093,7 @@ PR_IMPLEMENT(void) PRP_DestroyNakedCondVar(PRCondVar *cvar)
 #if defined(DEBUG)
         memset(cvar, 0xaf, sizeof(PRCondVar));
 #endif
-    PR_DELETE(cvar);
+    PR_Free(cvar);
 }  /* PRP_DestroyNakedCondVar */
 
 PR_IMPLEMENT(PRStatus) PRP_NakedWait(

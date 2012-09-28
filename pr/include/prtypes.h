@@ -1,39 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape Portable Runtime (NSPR).
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1998-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** File:                prtypes.h
@@ -228,6 +196,13 @@
 #define PR_MAX(x,y)     ((x)>(y)?(x):(y))
 #define PR_ABS(x)       ((x)<0?-(x):(x))
 
+/***********************************************************************
+** MACROS:      PR_ARRAY_SIZE
+** DESCRIPTION:
+**  The number of elements in an array.
+***********************************************************************/
+#define PR_ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
+
 PR_BEGIN_EXTERN_C
 
 /************************************************************************
@@ -235,7 +210,7 @@ PR_BEGIN_EXTERN_C
 **              PRInt8
 ** DESCRIPTION:
 **  The int8 types are known to be 8 bits each. There is no type that
-**      is equivalent to a plain "char". 
+**      is equivalent to a plain "char".
 ************************************************************************/
 #if PR_BYTES_PER_BYTE == 1
 typedef unsigned char PRUint8;
@@ -274,7 +249,7 @@ typedef signed char PRInt8;
 ** TYPES:       PRUint16
 **              PRInt16
 ** DESCRIPTION:
-**  The int16 types are known to be 16 bits each. 
+**  The int16 types are known to be 16 bits each.
 ************************************************************************/
 #if PR_BYTES_PER_SHORT == 2
 typedef unsigned short PRUint16;
@@ -299,7 +274,7 @@ typedef short PRInt16;
 ** TYPES:       PRUint32
 **              PRInt32
 ** DESCRIPTION:
-**  The int32 types are known to be 32 bits each. 
+**  The int32 types are known to be 32 bits each.
 ************************************************************************/
 #if PR_BYTES_PER_INT == 4
 typedef unsigned int PRUint32;
@@ -336,6 +311,23 @@ typedef long PRInt32;
 **      architectures and even different compilers have varying support for
 **      64 bit values. The only guaranteed portability requires the use of
 **      the LL_ macros (see prlong.h).
+**
+** MACROS:      PR_INT64
+**              PR_UINT64
+** DESCRIPTION:
+**  The PR_INT64 and PR_UINT64 macros provide a portable way for
+**      specifying 64-bit integer constants. They can only be used if
+**      PRInt64 and PRUint64 are defined as compiler-supported 64-bit
+**      integer types (i.e., if HAVE_LONG_LONG is defined, which is true
+**      for all the supported compilers topday). If PRInt64 and PRUint64
+**      are defined as structs, the LL_INIT macro defined in prlong.h has
+**      to be used.
+**
+** MACROS:      PR_INT64_MAX
+**              PR_INT64_MIN
+**              PR_UINT64_MAX
+** DESCRIPTION:
+**  The maximum and minimum values of a PRInt64 or PRUint64.
 ************************************************************************/
 #ifdef HAVE_LONG_LONG
 /* Keep this in sync with prlong.h. */
@@ -347,13 +339,23 @@ typedef long PRInt32;
 #if PR_BYTES_PER_LONG == 8 && !defined(__APPLE__)
 typedef long PRInt64;
 typedef unsigned long PRUint64;
+#define PR_INT64(x)  x ## L
+#define PR_UINT64(x) x ## UL
 #elif defined(WIN32) && !defined(__GNUC__)
 typedef __int64  PRInt64;
 typedef unsigned __int64 PRUint64;
+#define PR_INT64(x)  x ## i64
+#define PR_UINT64(x) x ## ui64
 #else
 typedef long long PRInt64;
 typedef unsigned long long PRUint64;
+#define PR_INT64(x)  x ## LL
+#define PR_UINT64(x) x ## ULL
 #endif /* PR_BYTES_PER_LONG == 8 */
+
+#define PR_INT64_MAX PR_INT64(0x7fffffffffffffff)
+#define PR_INT64_MIN (-PR_INT64_MAX - 1)
+#define PR_UINT64_MAX PR_UINT64(-1)
 #else  /* !HAVE_LONG_LONG */
 typedef struct {
 #ifdef IS_LITTLE_ENDIAN
@@ -363,6 +365,11 @@ typedef struct {
 #endif
 } PRInt64;
 typedef PRInt64 PRUint64;
+
+#define PR_INT64_MAX (PRInt64){0x7fffffff, 0xffffffff}
+#define PR_INT64_MIN (PRInt64){0xffffffff, 0xffffffff}
+#define PR_UINT64_MAX (PRUint64){0xffffffff, 0xffffffff}
+
 #endif /* !HAVE_LONG_LONG */
 
 /************************************************************************
@@ -372,7 +379,7 @@ typedef PRInt64 PRUint64;
 **  The PRIntn types are most appropriate for automatic variables. They are
 **      guaranteed to be at least 16 bits, though various architectures may
 **      define them to be wider (e.g., 32 or even 64 bits). These types are
-**      never valid for fields of a structure. 
+**      never valid for fields of a structure.
 ************************************************************************/
 #if PR_BYTES_PER_INT >= 2
 typedef int PRIntn;
@@ -384,14 +391,14 @@ typedef unsigned int PRUintn;
 /************************************************************************
 ** TYPES:       PRFloat64
 ** DESCRIPTION:
-**  NSPR's floating point type is always 64 bits. 
+**  NSPR's floating point type is always 64 bits.
 ************************************************************************/
 typedef double          PRFloat64;
 
 /************************************************************************
 ** TYPES:       PRSize
 ** DESCRIPTION:
-**  A type for representing the size of objects. 
+**  A type for representing the size of objects.
 ************************************************************************/
 typedef size_t PRSize;
 
@@ -399,7 +406,7 @@ typedef size_t PRSize;
 /************************************************************************
 ** TYPES:       PROffset32, PROffset64
 ** DESCRIPTION:
-**  A type for representing byte offsets from some location. 
+**  A type for representing byte offsets from some location.
 ************************************************************************/
 typedef PRInt32 PROffset32;
 typedef PRInt64 PROffset64;
@@ -408,7 +415,7 @@ typedef PRInt64 PROffset64;
 ** TYPES:       PRPtrDiff
 ** DESCRIPTION:
 **  A type for pointer difference. Variables of this type are suitable
-**      for storing a pointer or pointer subtraction. 
+**      for storing a pointer or pointer subtraction.
 ************************************************************************/
 typedef ptrdiff_t PRPtrdiff;
 
@@ -416,10 +423,10 @@ typedef ptrdiff_t PRPtrdiff;
 ** TYPES:       PRUptrdiff
 ** DESCRIPTION:
 **  A type for pointer difference. Variables of this type are suitable
-**      for storing a pointer or pointer sutraction. 
+**      for storing a pointer or pointer sutraction.
 ************************************************************************/
 #ifdef _WIN64
-typedef unsigned __int64 PRUptrdiff;
+typedef PRUint64 PRUptrdiff;
 #else
 typedef unsigned long PRUptrdiff;
 #endif
@@ -430,7 +437,7 @@ typedef unsigned long PRUptrdiff;
 **  Use PRBool for variables and parameter types. Use PR_FALSE and PR_TRUE
 **      for clarity of target type in assignments and actual arguments. Use
 **      'if (bool)', 'while (!bool)', '(bool) ? x : y' etc., to test booleans
-**      just as you would C int-valued conditions. 
+**      just as you would C int-valued conditions.
 ************************************************************************/
 typedef PRIntn PRBool;
 #define PR_TRUE 1
@@ -445,7 +452,7 @@ typedef PRIntn PRBool;
 typedef PRUint8 PRPackedBool;
 
 /*
-** Status code used by some routines that have a single point of failure or 
+** Status code used by some routines that have a single point of failure or
 ** special status return.
 */
 typedef enum { PR_FAILURE = -1, PR_SUCCESS = 0 } PRStatus;
@@ -471,8 +478,8 @@ typedef PRUint16 PRUnichar;
 ** http://java.sun.com/docs/books/vmspec/index.html.)
 */
 #ifdef _WIN64
-typedef __int64 PRWord;
-typedef unsigned __int64 PRUword;
+typedef PRInt64 PRWord;
+typedef PRUint64 PRUword;
 #else
 typedef long PRWord;
 typedef unsigned long PRUword;
@@ -518,6 +525,14 @@ typedef unsigned long PRUword;
 
 /********* ????????????? End Fix me ?????????????????????????????? *****/
 #endif /* NO_NSPR_10_SUPPORT */
+
+/*
+** Compile-time assert. "condition" must be a constant expression.
+** The macro can be used only in places where an "extern" declaration is
+** allowed.
+*/
+#define PR_STATIC_ASSERT(condition) \
+    extern void pr_static_assert(int arg[(condition) ? 1 : -1])
 
 PR_END_EXTERN_C
 

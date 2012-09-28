@@ -1,40 +1,7 @@
 /* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- * 
- * The Original Code is the Netscape Portable Runtime (NSPR).
- * 
- * The Initial Developer of the Original Code is Netscape
- * Communications Corporation.  Portions created by Netscape are 
- * Copyright (C) 1998-2000 Netscape Communications Corporation.  All
- * Rights Reserved.
- * 
- * Contributor(s):
- * 
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK *****
- */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Lifetime-based fast allocation, inspired by much prior art, including
@@ -129,7 +96,15 @@ PR_IMPLEMENT(void) PL_InitArenaPool(
     pool->first.base = pool->first.avail = pool->first.limit =
         (PRUword)PL_ARENA_ALIGN(pool, &pool->first + 1);
     pool->current = &pool->first;
-    pool->arenasize = size;                                  
+    /*
+     * Compute the net size so that each arena's gross size is |size|.
+     * sizeof(PLArena) + pool->mask is the header and alignment slop
+     * that PL_ArenaAllocate adds to the net size.
+     */
+    if (size > sizeof(PLArena) + pool->mask)
+        pool->arenasize = size - (sizeof(PLArena) + pool->mask);
+    else
+        pool->arenasize = size;
 #ifdef PL_ARENAMETER
     memset(&pool->stats, 0, sizeof pool->stats);
     pool->stats.name = strdup(name);
@@ -256,6 +231,21 @@ PR_IMPLEMENT(void *) PL_ArenaGrow(
     return newp;
 }
 
+static void ClearArenaList(PLArena *a, PRInt32 pattern)
+{
+
+    for (; a; a = a->next) {
+        PR_ASSERT(a->base <= a->avail && a->avail <= a->limit);
+        a->avail = a->base;
+	PL_CLEAR_UNUSED_PATTERN(a, pattern);
+    }
+}
+
+PR_IMPLEMENT(void) PL_ClearArenaPool(PLArenaPool *pool, PRInt32 pattern)
+{
+    ClearArenaList(pool->first.next, pattern);
+}
+
 /*
  * Free tail arenas linked after head, which may not be the true list head.
  * Reset pool->current to point to head in case it pointed at a tail arena.
@@ -270,12 +260,7 @@ static void FreeArenaList(PLArenaPool *pool, PLArena *head, PRBool reallyFree)
         return;
 
 #ifdef DEBUG
-    do {
-        PR_ASSERT(a->base <= a->avail && a->avail <= a->limit);
-        a->avail = a->base;
-        PL_CLEAR_UNUSED(a);
-    } while ((a = a->next) != 0);
-    a = *ap;
+    ClearArenaList(a, PL_FREE_PATTERN);
 #endif
 
     if (reallyFree) {
@@ -304,8 +289,8 @@ PR_IMPLEMENT(void) PL_ArenaRelease(PLArenaPool *pool, char *mark)
 {
     PLArena *a;
 
-    for (a = pool->first.next; a; a = a->next) {
-        if (PR_UPTRDIFF(mark, a->base) < PR_UPTRDIFF(a->avail, a->base)) {
+    for (a = &pool->first; a; a = a->next) {
+        if (PR_UPTRDIFF(mark, a->base) <= PR_UPTRDIFF(a->avail, a->base)) {
             a->avail = (PRUword)PL_ARENA_ALIGN(pool, mark);
             FreeArenaList(pool, a, PR_FALSE);
             return;
