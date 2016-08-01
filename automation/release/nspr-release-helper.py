@@ -16,10 +16,6 @@ prinit_h = "pr/include/prinit.h"
 f_conf = "configure"
 f_conf_in = "configure.in"
 
-topsrcdir = os.path.dirname(__file__)
-if topsrcdir == '':
-    topsrcdir = '.'
-
 def check_call_noisy(cmd, *args, **kwargs):
     print "Executing command:", cmd
     check_call(cmd, *args, **kwargs)
