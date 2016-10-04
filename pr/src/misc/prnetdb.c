@@ -1777,18 +1777,12 @@ PR_IMPLEMENT(PRUint64) PR_ntohll(PRUint64 n)
 #ifdef IS_BIG_ENDIAN
     return n;
 #else
-    PRUint64 tmp;
     PRUint32 hi, lo;
-    LL_L2UI(lo, n);
-    LL_SHR(tmp, n, 32);
-    LL_L2UI(hi, tmp);
+    lo = (PRUint32)n;
+    hi = (PRUint32)(n >> 32);
     hi = PR_ntohl(hi);
     lo = PR_ntohl(lo);
-    LL_UI2L(n, lo);
-    LL_SHL(n, n, 32);
-    LL_UI2L(tmp, hi);
-    LL_ADD(n, n, tmp);
-    return n;
+    return ((PRUint64)lo << 32) + (PRUint64)hi;
 #endif
 }  /* ntohll */
 
@@ -1797,18 +1791,12 @@ PR_IMPLEMENT(PRUint64) PR_htonll(PRUint64 n)
 #ifdef IS_BIG_ENDIAN
     return n;
 #else
-    PRUint64 tmp;
     PRUint32 hi, lo;
-    LL_L2UI(lo, n);
-    LL_SHR(tmp, n, 32);
-    LL_L2UI(hi, tmp);
+    lo = (PRUint32)n;
+    hi = (PRUint32)(n >> 32);
     hi = htonl(hi);
     lo = htonl(lo);
-    LL_UI2L(n, lo);
-    LL_SHL(n, n, 32);
-    LL_UI2L(tmp, hi);
-    LL_ADD(n, n, tmp);
-    return n;
+    return ((PRUint64)lo << 32) + (PRUint64)hi;
 #endif
 }  /* htonll */
 
