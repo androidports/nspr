@@ -6524,6 +6524,8 @@ fi
 
     $as_echo "#define HAVE_SOCKLEN_T 1" >>confdefs.h
 
+    $as_echo "#define HAVE_POINTER_LOCALTIME_R 1" >>confdefs.h
+
     AS='$(CC) -x assembler-with-cpp'
     CFLAGS="$CFLAGS -Wall -fno-common"
     case "${target_cpu}" in
@@ -6974,6 +6976,8 @@ tools are selected during the Xcode/Developer Tools installation." "$LINENO" 5
     $as_echo "#define _GNU_SOURCE 1" >>confdefs.h
 
     $as_echo "#define HAVE_FCNTL_FILE_LOCKING 1" >>confdefs.h
+
+    $as_echo "#define HAVE_POINTER_LOCALTIME_R 1" >>confdefs.h
 
     case "${target}" in
     *-android*|*-linuxandroid*)

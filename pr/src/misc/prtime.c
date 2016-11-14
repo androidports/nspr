@@ -495,6 +495,20 @@ PR_NormalizeTime(PRExplodedTime *time, PRTimeParamFn params)
 
 #define MT_safe_localtime localtime_r
 
+#elif defined(_MSC_VER)
+
+/* Visual C++ has had localtime_s() since Visual C++ 2005. */
+
+static struct tm *MT_safe_localtime(const time_t *clock, struct tm *result)
+{
+    errno_t err = localtime_s(result, clock);
+    if (err != 0) {
+        errno = err;
+        return NULL;
+    }
+    return result;
+}
+
 #else
 
 #define HAVE_LOCALTIME_MONITOR 1  /* We use 'monitor' to serialize our calls

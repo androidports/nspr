@@ -1349,6 +1349,7 @@ case "$target" in
     AC_DEFINE(DARWIN)
     AC_DEFINE(HAVE_BSD_FLOCK)
     AC_DEFINE(HAVE_SOCKLEN_T)
+    AC_DEFINE(HAVE_POINTER_LOCALTIME_R)
     AS='$(CC) -x assembler-with-cpp'
     CFLAGS="$CFLAGS -Wall -fno-common"
     case "${target_cpu}" in
@@ -1789,6 +1790,7 @@ tools are selected during the Xcode/Developer Tools installation.])
     AC_DEFINE(XP_UNIX)
     AC_DEFINE(_GNU_SOURCE)
     AC_DEFINE(HAVE_FCNTL_FILE_LOCKING)
+    AC_DEFINE(HAVE_POINTER_LOCALTIME_R)
     case "${target}" in
     *-android*|*-linuxandroid*)
         OS_TARGET=Android
