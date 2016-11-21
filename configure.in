@@ -716,6 +716,40 @@ else
 fi
 
 dnl ========================================================
+dnl Check for pragma diagnostic
+dnl ========================================================
+
+AC_MSG_CHECKING([for pragma diagnostic])
+if test "$GNU_CC" = "1"; then
+    cat >dummy-hello.c <<EOF
+#ifdef _PR_HAS_PRAGMA_DIAGNOSTIC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+int main() {
+    char *dummy = "";
+    return 0;
+}
+EOF
+    ${CC} -Werror=unused-but-set-variable -S dummy-hello.c -o dummy-hello.s 2>&5
+    if test $? != 0; then
+        ${CC} -Werror=unused-but-set-variable -D_PR_HAS_PRAGMA_DIAGNOSTIC -S dummy-hello.c -o dummy-hello.s 2>&5
+        if test $? = 0; then
+            CFLAGS="$CFLAGS -D_PR_HAS_PRAGMA_DIAGNOSTIC=1"
+            _res=yes
+        else
+            _res=no
+        fi
+    else
+        _res=no
+    fi
+    rm -f dummy-hello.c dummy-hello.s
+    AC_MSG_RESULT([$_res])
+else
+    AC_MSG_RESULT([no])
+fi
+
+dnl ========================================================
 dnl Profile guided optimization
 dnl ========================================================
 dnl Test for profiling options
