@@ -1405,7 +1405,7 @@ PR_IMPLEMENT(PRStatus) PR_InitializeNetAddr(
     PRStatus rv = PR_SUCCESS;
     if (!_pr_initialized) _PR_ImplicitInitialization();
 
-	if (val != PR_IpAddrNull) memset(addr, 0, sizeof(addr->inet));
+	if (val != PR_IpAddrNull) memset(addr, 0, sizeof(*addr));
 	addr->inet.family = AF_INET;
 	addr->inet.port = htons(port);
 	switch (val)
