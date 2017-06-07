@@ -247,13 +247,14 @@ ForkAndExec(
             PR_DELETE(newEnvp);
         }
         return NULL;
-    } else if (0 == process->md.pid) {  /* the child process */
-        /*
-         * If the child process needs to exit, it must call _exit().
-         * Do not call exit(), because exit() will flush and close
-         * the standard I/O file descriptors, and hence corrupt
-         * the parent process's standard I/O data structures.
-         */
+    }
+    if (0 == process->md.pid) {  /* the child process */
+      /*
+       * If the child process needs to exit, it must call _exit().
+       * Do not call exit(), because exit() will flush and close
+       * the standard I/O file descriptors, and hence corrupt
+       * the parent process's standard I/O data structures.
+       */
 
 #if !defined(NTO) && !defined(SYMBIAN)
         if (attr) {
@@ -498,10 +499,9 @@ ExtractExitStatus(int rawExitStatus)
 #endif
     if (WIFEXITED(rawExitStatus)) {
 	return WEXITSTATUS(rawExitStatus);
-    } else {
+    }
 	PR_ASSERT(WIFSIGNALED(rawExitStatus));
 	return _PR_SIGNALED_EXITSTATUS;
-    }
 }
 
 static void
