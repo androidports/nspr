@@ -624,8 +624,8 @@ static void WaitPidDaemonThread(void *unused)
         } while (sizeof(buf) == rv || (-1 == rv && EINTR == errno));
 
 #ifdef _PR_SHARE_CLONES
-	PR_Unlock(pr_wp.ml);
 	while ((op = pr_wp.opHead) != NULL) {
+	    PR_Unlock(pr_wp.ml);
 	    op->process = ForkAndExec(op->path, op->argv,
 		    op->envp, op->attr);
 	    if (NULL == op->process) {
@@ -639,8 +639,8 @@ static void WaitPidDaemonThread(void *unused)
 	    }
 	    op->done = PR_TRUE;
 	    PR_NotifyCondVar(op->doneCV);
-	    PR_Unlock(pr_wp.ml);
 	}
+	PR_Unlock(pr_wp.ml);
 #endif
 
 	while (1) {
