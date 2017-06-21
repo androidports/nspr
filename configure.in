@@ -1389,6 +1389,7 @@ case "$target" in
     changequote([,])
     if test "$HOST_DARWIN_MAJOR" -ge 15 ; then
         AC_DEFINE(HAS_CONNECTX)
+    fi
     AS='$(CC) -x assembler-with-cpp'
     CFLAGS="$CFLAGS -Wall -fno-common"
     case "${target_cpu}" in
