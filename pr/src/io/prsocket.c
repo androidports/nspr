@@ -304,7 +304,21 @@ static PRStatus PR_CALLBACK SocketConnectContinue(
         if (err != 0) {
             _PR_MD_MAP_CONNECT_ERROR(err);
         } else {
-            PR_SetError(PR_UNKNOWN_ERROR, 0);
+            if (fd->secret->overlappedActive) {
+                PRInt32 rvSent;
+                if (GetOverlappedResult(osfd, &fd->secret->ol, &rvSent, FALSE) == FALSE) {
+                    err = WSAGetLastError();
+                    PR_LOG(_pr_io_lm, PR_LOG_MIN,
+                           ("SocketConnectContinue GetOverlappedResult failed %d\n", err));
+                    if (err != ERROR_IO_INCOMPLETE) {
+                        _PR_MD_MAP_CONNECT_ERROR(err);
+                        fd->secret->overlappedActive = PR_FALSE;
+                    }
+                }
+            }
+            if (err == 0) {
+                PR_SetError(PR_UNKNOWN_ERROR, 0);
+            }
         }
         return PR_FAILURE;
     }
