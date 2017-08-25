@@ -1680,6 +1680,33 @@ PR_ChangeFileDescNativeHandle(PRFileDesc *fd, PROsfd handle)
 		fd->secret->md.osfd = handle;
 }
 
+/* Expose OVERLAPPED if present. OVERLAPPED is implemented only on WIN95. */
+PR_IMPLEMENT(PRStatus)
+PR_EXPERIMENTAL_ONLY_IN_4_17_GetOverlappedIOHandle(PRFileDesc *fd, void **ol)
+{
+#if defined(_WIN64) && defined(WIN95)
+    *ol = NULL;
+    if (fd) {
+        fd = PR_GetIdentitiesLayer(fd, PR_NSPR_IO_LAYER);
+    }
+    if (!fd) {
+        PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
+        return PR_FAILURE;
+    }
+
+    if (!fd->secret->overlappedActive) {
+        PR_SetError(PR_INVALID_ARGUMENT_ERROR, 0);
+        return PR_FAILURE;
+    }
+
+    *ol = &fd->secret->ol;
+    return PR_SUCCESS;
+#else
+    PR_SetError(PR_NOT_IMPLEMENTED_ERROR, 0);
+    return PR_FAILURE;
+#endif
+}
+
 /*
 ** Select compatibility
 **
