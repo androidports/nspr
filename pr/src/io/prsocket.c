@@ -304,6 +304,7 @@ static PRStatus PR_CALLBACK SocketConnectContinue(
         if (err != 0) {
             _PR_MD_MAP_CONNECT_ERROR(err);
         } else {
+#if defined(_WIN64)
             if (fd->secret->overlappedActive) {
                 PRInt32 rvSent;
                 if (GetOverlappedResult(osfd, &fd->secret->ol, &rvSent, FALSE) == FALSE) {
@@ -319,6 +320,9 @@ static PRStatus PR_CALLBACK SocketConnectContinue(
             if (err == 0) {
                 PR_SetError(PR_UNKNOWN_ERROR, 0);
             }
+#else
+            PR_SetError(PR_UNKNOWN_ERROR, 0);
+#endif
         }
         return PR_FAILURE;
     }
